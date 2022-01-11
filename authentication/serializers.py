@@ -17,10 +17,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password']
+        fields = ['user_type', 'first_name', 'last_name', 'contact_number', 'email', 'username', 'password']
 
     def validate(self, attrs):
-        email = attrs.get('email', '')
         username = attrs.get('username', '')
 
         if not username.isalnum():
@@ -46,7 +45,6 @@ class LoginSerializer(serializers.ModelSerializer):
         max_length=68, min_length=6, write_only=True)
     username = serializers.CharField(
         max_length=255, min_length=3, read_only=True)
-
     tokens = serializers.SerializerMethodField()
 
     def get_tokens(self, obj):
@@ -145,3 +143,51 @@ class LogoutSerializer(serializers.Serializer):
 
         except TokenError:
             self.fail('bad_token')
+
+
+class UpdateUserSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=True)
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'contact_number', 'email', 'username']
+        extra_kwargs = {
+            'first_name': {'required': True},
+            'last_name': {'required': True},
+            'contact_number': {'required': True},
+        }
+
+    def validate_contact_number(self, value):
+        user = self.context['request'].user
+        if User.objects.exclude(pk=user.pk).filter(contact_number=value).exists():
+            raise serializers.ValidationError({"email": "This contact number is already in use."})
+        return value
+
+    def validate_email(self, value):
+        user = self.context['request'].user
+        if User.objects.exclude(pk=user.pk).filter(email=value).exists():
+            raise serializers.ValidationError({"email": "This email is already in use."})
+        return value
+
+    def validate_username(self, value):
+        user = self.context['request'].user
+        if User.objects.exclude(pk=user.pk).filter(username=value).exists():
+            raise serializers.ValidationError({"username": "This username is already in use."})
+        return value
+
+    def update(self, instance, validated_data):
+
+        user = self.context['request'].user
+        
+        if user.pk != instance.pk:
+            raise serializers.ValidationError({"authorize": "You dont have permission for this user."})
+            
+        instance.first_name = validated_data['first_name']
+        instance.last_name = validated_data['last_name']
+        instance.email = validated_data['email']
+        instance.username = validated_data['username']
+        instance.contact_number = validated_data['contact_number']
+
+        instance.save()
+
+        return instance
